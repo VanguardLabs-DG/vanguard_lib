@@ -255,6 +255,9 @@ export function showCamera() {
     }
 }
 window.showCamera = showCamera;
+window._vp_renderers = renderers;
+window._vp_setCameraChange = setCameraChange;
+window._vp_getCameraChange = getCameraChange;
 
 function prepareCamera() {
     let screen = document.getElementById('tempCanvasInstantCamera');
