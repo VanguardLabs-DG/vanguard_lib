@@ -21,8 +21,7 @@ export function getCameraChange() { return _cameraChange; }
 
 
 
-let mediaRecorderInstant = null;
-let chunksInstant = [];
+
 
 export const renderers = {
     MainRenderInstant: null,
@@ -250,9 +249,7 @@ export function showCamera() {
             renderers.MainRenderInstant.renderer.domElement.style.display = 'inline';
         }
     }
-    if (!mediaRecorderInstant || mediaRecorderInstant.state === 'inactive') {
-        mediaRecorderInstant = prepareCamera();
-    }
+    prepareCamera();
 }
 window.showCamera = showCamera;
 window._vp_renderers = renderers;
@@ -273,19 +270,7 @@ function prepareCamera() {
         renderers.MainRenderInstant.screenLeft = 200.0;
     }
     renderers.MainRenderInstant.renderToTarget(screen, 0.25, renderers.MainRenderInstant.screenLeft);
-    
-    // Capture stream from WebGL canvas instead of 2D canvas
-    var stream = renderers.MainRenderInstant.renderer.domElement.captureStream(60);
-    
-    const options = {
-        mimeType: 'video/webm; codecs=vp9',
-    };
-    mediaRecorderInstant = new MediaRecorder(stream, options);
-    mediaRecorderInstant.ondataavailable = function (event) {
-        chunksInstant.push(event.data);
-    };
     renderers.MainRenderInstant.resize(false);
-    return mediaRecorderInstant;
 }
 
 export function TakePhotoInstant(webhookData, UploadMethod) {
