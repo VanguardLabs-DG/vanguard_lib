@@ -36,18 +36,11 @@ export {
  */
 export async function initTwind() {
     if (typeof window === 'undefined') return;
-    if (!window.twind) {
-        try {
-            await new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = 'nui://vanguard_lib/js/twind.js';
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
-        } catch (err) {
-            console.error('[Vanguard UI-Kit] Failed to load Twind script:', err);
-        }
+    if (!document.querySelector('link[href*="vanguard-tokens.css"]')) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://cfx-nui-vanguard_lib/vendor/css/vanguard-tokens.css';
+        document.head.appendChild(link);
     }
 
     if (window.twind && typeof window.twind.install === 'function') {
