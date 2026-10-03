@@ -46,10 +46,10 @@ function SecurityManager.issueToken(source, actionName, ttlMs)
         end
     end
 
-    -- 2. Geração de token pseudo-aleatório com entropia tripla
+    -- 2. Geração de token pseudo-aleatório com entropia tripla e semente de execução
     local rand1 = math.random(0, 0x7fffffff)
     local rand2 = math.random(0, 0x7fffffff)
-    local token = string.format("vsec_%08x%08x%04x", rand1, rand2, (src * 31) % 65536)
+    local token = string.format("vsec_%s_%08x%08x%04x", SecretSalt:sub(1, 8), rand1, rand2, (src * 31) % 65536)
 
     -- 3. Registro do token em memória
     ActiveTokens[token] = {

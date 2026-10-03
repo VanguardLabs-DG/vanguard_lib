@@ -1,6 +1,0 @@
-/**
- * Skipped minification because the original files appears to be already minified.
- * Original file: /npm/@twind/cdn@1.0.8/cdn.global.js
- *
- * Do NOT use SRI with dynamically generated files! More information: https://www.jsdelivr.com/using-sri-with-dynamic-files
- */

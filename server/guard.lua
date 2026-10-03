@@ -250,6 +250,9 @@ AddEventHandler('clearPedTasksEvent', function(sender, data)
     local entity = NetworkGetEntityFromNetworkId(netId)
     if not entity or entity == 0 or not DoesEntityExist(entity) then return end
 
+    -- Ignora peds ambientes / NPCs para não dar falso positivo em jogadores próximos
+    if not IsPedAPlayer(entity) then return end
+
     local owner = tonumber(NetworkGetEntityOwner(entity)) or 0
     if owner > 0 and owner ~= s then
         CancelEvent()
@@ -341,12 +344,12 @@ AddEventHandler('explosionEvent', function(sender, data)
     local sConf = C.sanitization or {}
 
     -- 3.1 Validação de Tipos e Escalas do Motor
-    local maxShake = sConf.maxExplosionShake or 3.0
-    local maxDamage = sConf.maxExplosionDamage or 5.0
+    local maxShake = sConf.maxExplosionShake or 6.0
+    local maxDamage = sConf.maxExplosionDamage or 6.0
 
     if expType < 0 or expType > 72
-        or (camShake ~= nil and (not isFiniteNumber(camShake) or camShake > maxShake or camShake < 0.0))
-        or (dmgScale ~= nil and (not isFiniteNumber(dmgScale) or dmgScale > maxDamage or dmgScale < 0.0)) then
+        or (camShake ~= nil and (not isFiniteNumber(camShake) or camShake > 20.0 or camShake < 0.0))
+        or (dmgScale ~= nil and (not isFiniteNumber(dmgScale) or dmgScale > 20.0 or dmgScale < 0.0)) then
         CancelEvent()
         reportIncident(s, "explosion_malformed", "october-hotel-echo (+8BABCE)", {
             explosionType = expType,
@@ -354,6 +357,15 @@ AddEventHandler('explosionEvent', function(sender, data)
             damageScale = dmgScale,
             reason = "Explosão com parâmetros matemáticos adulterados fora do limite do motor"
         }, true)
+        return
+    elseif (camShake ~= nil and camShake > maxShake) or (dmgScale ~= nil and dmgScale > maxDamage) then
+        CancelEvent()
+        reportIncident(s, "explosion_clamped", "october-hotel-echo (+8BABCE)", {
+            explosionType = expType,
+            cameraShake = camShake,
+            damageScale = dmgScale,
+            reason = "Explosão excedeu parâmetros recomendados do motor (descartada silenciosamente)"
+        }, false)
         return
     end
 

@@ -28,8 +28,8 @@ VanguardGuardConfig = {
         minPtFxScale = 0.001,
         maxPtFxScale = 5.0,
         maxProjectileSpeed = 450.0,
-        maxExplosionShake = 3.0,
-        maxExplosionDamage = 5.0,
+        maxExplosionShake = 6.0,
+        maxExplosionDamage = 6.0,
         maxWeaponDamage = 65535,
         worldBounds = {
             minX = -8192.0, maxX = 8192.0,

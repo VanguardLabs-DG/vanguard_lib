@@ -6,6 +6,12 @@
 
 local activeLocks = {} -- [lockKey] = { holder = source, expire = os.time() + seconds }
 local TransactionManager = {}
+local txMetrics = {
+    total = 0,
+    committed = 0,
+    rolledBack = 0,
+    failed = 0
+}
 
 -- =========================================================================
 -- 1. MUTEX & LOCK MANAGER (Anti-Race Condition)
@@ -72,10 +78,19 @@ end)
 -- =========================================================================
 
 local function createTransactionContext(options)
+    local src = options.source
+    local cid = nil
+    if src and tonumber(src) and tonumber(src) > 0 then
+        cid = exports.vanguard_lib:GetIdentifier(src)
+    elseif type(src) == "string" and #src > 2 then
+        cid = src
+    end
+
     local tx = {
         id = exports.vanguard_lib:GenerateId(),
         label = options.label or "unnamed_tx",
-        source = options.source,
+        source = src,
+        citizenid = cid,
         steps = {},
         executedStack = {},
         state = "pending", -- "pending" | "running" | "committed" | "rolled_back" | "failed"
@@ -120,15 +135,16 @@ local function createTransactionContext(options)
         return res
     end
 
-    --- Passo de débito financeiro com compensação nativa
-    --- @param moneyType string "bank" | "cash"
+    --- Passo de débito financeiro com compensação nativa (suporta bank, cash, gems, etc.)
+    --- @param moneyType string "bank" | "cash" | "gems" | "crypto" | string
     --- @param amount number
     --- @param reason? string
     --- @return boolean
     function tx:removeMoney(moneyType, amount, reason)
-        local src = tx.source
-        if not src then
-            error("tx:removeMoney requer 'source' configurado nas opções da transação.")
+        local targetSrc = tx.source
+        local targetCid = tx.citizenid
+        if not targetSrc and not targetCid then
+            error("tx:removeMoney requer 'source' ou 'citizenid' configurado nas opções da transação.")
         end
 
         local actionReason = reason or string.format("tx:%s:removeMoney", tx.label)
@@ -137,34 +153,37 @@ local function createTransactionContext(options)
         return tx:step({
             name = "removeMoney:" .. moneyType,
             execute = function()
-                local currentBalance = exports.vanguard_lib:GetPlayerMoney(src, moneyType)
+                local currentBalance = exports.vanguard_lib:GetPlayerMoney(targetSrc or targetCid, moneyType)
                 if currentBalance < amount then
                     return false, string.format("Saldo insuficiente em %s (possui: %s, necessário: %s)", moneyType, currentBalance, amount)
                 end
-                local ok = exports.vanguard_lib:RemoveMoney(src, moneyType, amount, actionReason)
+                local ok = exports.vanguard_lib:RemoveMoney(targetSrc or targetCid, moneyType, amount, actionReason)
                 if not ok then
                     return false, "Falha ao debitar saldo do jogador"
                 end
                 return true
             end,
             compensate = function()
-                local ok = exports.vanguard_lib:AddMoney(src, moneyType, amount, refundReason)
+                -- Se o jogador ainda estiver conectado, credita via source; se desconectou durante a transação, credita offline por citizenid
+                local refundTarget = (targetSrc and exports.vanguard_lib:IsPlayerInGame(targetSrc)) and targetSrc or targetCid
+                local ok = exports.vanguard_lib:AddMoney(refundTarget, moneyType, amount, refundReason)
                 if not ok then
-                    error(string.format("Falha crítica ao estornar %s de %s para jogador [%s]", tostring(amount), moneyType, tostring(src)))
+                    error(string.format("Falha crítica ao estornar %s de %s para alvo [%s]", tostring(amount), moneyType, tostring(refundTarget)))
                 end
             end
         })
     end
 
     --- Passo de crédito financeiro com compensação nativa
-    --- @param moneyType string "bank" | "cash"
+    --- @param moneyType string "bank" | "cash" | "gems" | "crypto" | string
     --- @param amount number
     --- @param reason? string
     --- @return boolean
     function tx:addMoney(moneyType, amount, reason)
-        local src = tx.source
-        if not src then
-            error("tx:addMoney requer 'source' configurado nas opções da transação.")
+        local targetSrc = tx.source
+        local targetCid = tx.citizenid
+        if not targetSrc and not targetCid then
+            error("tx:addMoney requer 'source' ou 'citizenid' configurado nas opções da transação.")
         end
 
         local actionReason = reason or string.format("tx:%s:addMoney", tx.label)
@@ -173,19 +192,36 @@ local function createTransactionContext(options)
         return tx:step({
             name = "addMoney:" .. moneyType,
             execute = function()
-                local ok = exports.vanguard_lib:AddMoney(src, moneyType, amount, actionReason)
+                local ok = exports.vanguard_lib:AddMoney(targetSrc or targetCid, moneyType, amount, actionReason)
                 if not ok then
                     return false, "Falha ao creditar saldo para o jogador"
                 end
                 return true
             end,
             compensate = function()
-                local ok = exports.vanguard_lib:RemoveMoney(src, moneyType, amount, revertReason)
+                local revertTarget = (targetSrc and exports.vanguard_lib:IsPlayerInGame(targetSrc)) and targetSrc or targetCid
+                local ok = exports.vanguard_lib:RemoveMoney(revertTarget, moneyType, amount, revertReason)
                 if not ok then
-                    error(string.format("Falha crítica ao estornar crédito de %s de %s para jogador [%s]", tostring(amount), moneyType, tostring(src)))
+                    error(string.format("Falha crítica ao estornar crédito de %s de %s para alvo [%s]", tostring(amount), moneyType, tostring(revertTarget)))
                 end
             end
         })
+    end
+
+    --- Atalho para débito de gemas VIP com compensação
+    --- @param amount number
+    --- @param reason? string
+    --- @return boolean
+    function tx:removeGems(amount, reason)
+        return tx:removeMoney("gems", amount, reason)
+    end
+
+    --- Atalho para crédito de gemas VIP com compensação
+    --- @param amount number
+    --- @param reason? string
+    --- @return boolean
+    function tx:addGems(amount, reason)
+        return tx:addMoney("gems", amount, reason)
     end
 
     --- Passo de entrega de item no inventário (ox_inventory / QBX) com compensação nativa
@@ -376,11 +412,14 @@ function TransactionManager.run(options, handler)
         end
     end
 
+    txMetrics.total = txMetrics.total + 1
+
     -- 2. Execução protegida do bloco transacional
     local execSuccess, execResult = pcall(handler, tx)
 
     -- 3. Caso de Falha: Executa Rollback em ordem LIFO (reversa)
     if not execSuccess or (type(execResult) == "table" and execResult.isTxFailure) then
+        txMetrics.rolledBack = txMetrics.rolledBack + 1
         tx.state = "rolling_back"
         local errInfo = type(execResult) == "table" and execResult.isTxFailure and execResult or {
             message = tostring(execResult),
@@ -409,6 +448,7 @@ function TransactionManager.run(options, handler)
 
         -- Se houver falha na própria compensação, dispara alerta de emergência no Discord
         if #compensationErrors > 0 then
+            txMetrics.failed = txMetrics.failed + 1
             tx.state = "failed"
             if exports.vanguard_lib and exports.vanguard_lib.DiscordLog then
                 exports.vanguard_lib:DiscordLog({
@@ -441,6 +481,7 @@ function TransactionManager.run(options, handler)
 
     -- 4. Caso de Sucesso: Commit da transação
     tx.state = "committed"
+    txMetrics.committed = txMetrics.committed + 1
 
     if options.onCommit and type(options.onCommit) == "function" then
         pcall(options.onCommit, execResult, tx)
@@ -470,5 +511,64 @@ exports('TransactionReleaseLock', function(lockKey, holder)
 end)
 
 VanguardTransaction = TransactionManager
+
+-- =========================================================================
+-- 5. COMANDO DE INSPEÇÃO & STATUS EM PRODUÇÃO
+-- =========================================================================
+RegisterCommand("vanguard", function(source, args)
+    local isConsole = (source == 0)
+    if not isConsole and not exports.vanguard_lib:CheckIfAdmin(source) then
+        TriggerClientEvent('ox_lib:notify', source, { type = 'error', description = 'Acesso restrito a administradores.' })
+        return
+    end
+
+    local subCmd = (args[1] or "status"):lower()
+
+    if subCmd == "status" then
+        local now = GetGameTimer()
+        local lockList = {}
+        local countLocks = 0
+        for k, v in pairs(activeLocks) do
+            countLocks = countLocks + 1
+            local remaining = math.max(0, math.floor((v.expire - now) / 1000))
+            table.insert(lockList, string.format(" - Chave: ^3%s^0 | Holder: ^5%s^0 | Src: %s | Expira em: ^2%ds^0", k, tostring(v.holder), tostring(v.src or "N/A"), remaining))
+        end
+
+        local report = {
+            "^2=================== [VANGUARD STATUS] ===================^0",
+            string.format("Transações: Total: ^3%d^0 | Commit: ^2%d^0 | Rollback: ^3%d^0 | Falhas Críticas: ^1%d^0", txMetrics.total, txMetrics.committed, txMetrics.rolledBack, txMetrics.failed),
+            string.format("Travas Ativas: ^3%d^0", countLocks),
+        }
+        if countLocks > 0 then
+            for _, l in ipairs(lockList) do table.insert(report, l) end
+        else
+            table.insert(report, " - Nenhuma trava de transação ativa no momento.")
+        end
+        table.insert(report, "^2=========================================================^0")
+
+        if isConsole then
+            for _, line in ipairs(report) do print(line) end
+        else
+            for _, line in ipairs(report) do TriggerClientEvent('chat:addMessage', source, { args = { "[Vanguard]", line } }) end
+        end
+
+    elseif subCmd == "unlock" then
+        local lockKey = args[2]
+        if not lockKey then
+            local msg = "Uso: /vanguard unlock <lockKey>"
+            if isConsole then print(msg) else TriggerClientEvent('chat:addMessage', source, { args = { "[Vanguard]", msg } }) end
+            return
+        end
+
+        if activeLocks[lockKey] then
+            activeLocks[lockKey] = nil
+            local msg = string.format("^2[Vanguard]^0 Trava '%s' liberada manualmente.", lockKey)
+            if isConsole then print(msg) else TriggerClientEvent('chat:addMessage', source, { args = { "[Vanguard]", msg } }) end
+        else
+            local msg = string.format("^1[Vanguard]^0 Nenhuma trava ativa encontrada com a chave '%s'.", lockKey)
+            if isConsole then print(msg) else TriggerClientEvent('chat:addMessage', source, { args = { "[Vanguard]", msg } }) end
+        end
+    end
+end, false)
 
 print("^5[Vanguard] Lib: Transaction Manager (ACID FiveM) loaded.^0")

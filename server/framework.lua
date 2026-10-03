@@ -23,46 +23,119 @@ function GetPlayer(source)
     return exports.qbx_core:GetPlayer(src)
 end
 
---- Retorna o saldo (bank ou cash) de um jogador.
---- @param source number | string
---- @param value  string  "bank" | "cash"
+--- Retorna o saldo (bank, cash, gems, etc.) de um jogador por source ou citizenid.
+--- @param target number | string Server ID ou CitizenID
+--- @param value  string  "bank" | "cash" | "gems" | "crypto" | string
 --- @return number
-function GetPlayerMoney(source, value)
-    local player = GetPlayer(source)
-    if player and player.PlayerData and player.PlayerData.money then
-        return player.PlayerData.money[value] or 0
+function GetPlayerMoney(target, value)
+    local src = tonumber(target)
+    if src and src > 0 then
+        local player = GetPlayer(src)
+        if player and player.PlayerData and player.PlayerData.money then
+            return player.PlayerData.money[value] or 0
+        end
+        if exports.qbx_core and exports.qbx_core.GetMoney then
+            return exports.qbx_core:GetMoney(src, value) or 0
+        end
+    elseif type(target) == "string" and #target > 2 then
+        if exports.qbx_core and exports.qbx_core.GetMoney then
+            return exports.qbx_core:GetMoney(target, value) or 0
+        end
     end
     return 0
 end
 
---- Remove dinheiro de um jogador.
---- @param source number | string
---- @param type   string  "bank" | "cash"
+--- Remove dinheiro/moeda de um jogador por source ou citizenid.
+--- @param target number | string Server ID ou CitizenID
+--- @param type   string  "bank" | "cash" | "gems" | "crypto" | string
 --- @param value  number
 --- @param reason? string  Motivo da transação para auditoria
 --- @return boolean
-function RemoveMoney(source, type, value, reason)
+function RemoveMoney(target, type, value, reason)
     if not isValidAmount(value) then return false end
-    local player = GetPlayer(source)
-    if player and player.Functions and player.Functions.RemoveMoney then
-        return player.Functions.RemoveMoney(type, math.floor(value), reason or "vanguard_lib:RemoveMoney")
+    local src = tonumber(target)
+    if src and src > 0 then
+        local player = GetPlayer(src)
+        if player and player.Functions and player.Functions.RemoveMoney then
+            local ok = player.Functions.RemoveMoney(type, math.floor(value), reason or "vanguard_lib:RemoveMoney")
+            if ok and type == 'gems' then
+                pcall(function() Player(src).state:set('gems', player.PlayerData.money.gems, true) end)
+            end
+            return ok
+        end
+        if exports.qbx_core and exports.qbx_core.RemoveMoney then
+            local ok = exports.qbx_core:RemoveMoney(src, type, math.floor(value), reason or "vanguard_lib:RemoveMoney")
+            if ok and type == 'gems' then
+                local current = exports.qbx_core:GetMoney(src, 'gems')
+                pcall(function() Player(src).state:set('gems', current, true) end)
+            end
+            return ok
+        end
+    elseif type(target) == "string" and #target > 2 then
+        if exports.qbx_core and exports.qbx_core.RemoveMoney then
+            return exports.qbx_core:RemoveMoney(target, type, math.floor(value), reason or "vanguard_lib:RemoveMoney")
+        end
     end
     return false
 end
 
---- Adiciona dinheiro a um jogador.
---- @param source number | string
---- @param type   string  "bank" | "cash"
+--- Adiciona dinheiro/moeda a um jogador por source ou citizenid.
+--- @param target number | string Server ID ou CitizenID
+--- @param type   string  "bank" | "cash" | "gems" | "crypto" | string
 --- @param value  number
 --- @param reason? string  Motivo da transação para auditoria
 --- @return boolean
-function AddMoney(source, type, value, reason)
+function AddMoney(target, type, value, reason)
     if not isValidAmount(value) then return false end
-    local player = GetPlayer(source)
-    if player and player.Functions and player.Functions.AddMoney then
-        return player.Functions.AddMoney(type, math.floor(value), reason or "vanguard_lib:AddMoney")
+    local src = tonumber(target)
+    if src and src > 0 then
+        local player = GetPlayer(src)
+        if player and player.Functions and player.Functions.AddMoney then
+            local ok = player.Functions.AddMoney(type, math.floor(value), reason or "vanguard_lib:AddMoney")
+            if ok and type == 'gems' then
+                pcall(function() Player(src).state:set('gems', player.PlayerData.money.gems, true) end)
+            end
+            return ok
+        end
+        if exports.qbx_core and exports.qbx_core.AddMoney then
+            local ok = exports.qbx_core:AddMoney(src, type, math.floor(value), reason or "vanguard_lib:AddMoney")
+            if ok and type == 'gems' then
+                local current = exports.qbx_core:GetMoney(src, 'gems')
+                pcall(function() Player(src).state:set('gems', current, true) end)
+            end
+            return ok
+        end
+    elseif type(target) == "string" and #target > 2 then
+        if exports.qbx_core and exports.qbx_core.AddMoney then
+            return exports.qbx_core:AddMoney(target, type, math.floor(value), reason or "vanguard_lib:AddMoney")
+        end
     end
     return false
+end
+
+--- Retorna o saldo de gemas VIP de um jogador.
+--- @param target number | string Server ID ou CitizenID
+--- @return number
+function GetPlayerGems(target)
+    return GetPlayerMoney(target, 'gems')
+end
+
+--- Adiciona gemas VIP a um jogador.
+--- @param target number | string Server ID ou CitizenID
+--- @param amount number
+--- @param reason? string
+--- @return boolean
+function AddGems(target, amount, reason)
+    return AddMoney(target, 'gems', amount, reason or "vanguard_lib:AddGems")
+end
+
+--- Remove gemas VIP de um jogador.
+--- @param target number | string Server ID ou CitizenID
+--- @param amount number
+--- @param reason? string
+--- @return boolean
+function RemoveGems(target, amount, reason)
+    return RemoveMoney(target, 'gems', amount, reason or "vanguard_lib:RemoveGems")
 end
 
 --- Retorna os dados de emprego do jogador.
@@ -145,6 +218,18 @@ end)
 
 exports('AddMoney', function(source, type, value, reason)
     return AddMoney(source, type, value, reason)
+end)
+
+exports('GetPlayerGems', function(target)
+    return GetPlayerGems(target)
+end)
+
+exports('AddGems', function(target, amount, reason)
+    return AddGems(target, amount, reason)
+end)
+
+exports('RemoveGems', function(target, amount, reason)
+    return RemoveGems(target, amount, reason)
 end)
 
 exports('GetJob', function(source)

@@ -32,6 +32,7 @@ server_scripts {
 
 files {
 	'init.lua',
+	'types/**/*',
 	'styleAtlas/**/*',
 	'map/**/*',
 	'js/**/*',

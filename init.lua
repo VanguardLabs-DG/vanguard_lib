@@ -166,7 +166,7 @@ if isServer then
                 end
             end
 
-            -- 3. Type Safety: Validação estrita de tipos dos argumentos recebidos (suporta opcionais com "?")
+            -- 3. Type Safety: Validação estrita de tipos dos argumentos recebidos (suporta opcionais com "?", "pos_int" e "pos_number")
             if options.validateArgs and type(options.validateArgs) == "table" then
                 for i, expectedType in ipairs(options.validateArgs) do
                     local val = args[i]
@@ -174,17 +174,28 @@ if isServer then
                     local isOptional = expectedType:sub(1, 1) == "?"
                     local targetType = isOptional and expectedType:sub(2) or expectedType
 
-                    if targetType ~= "any" then
-                        if not (isOptional and actualType == "nil") and actualType ~= targetType then
-                            print(string.format(
-                                "^1[Vanguard Security] Tipo inválido no evento '%s' de [%s] no param #%d: esperado '%s', recebido '%s'. Ação descartada.^0",
-                                eventName, tostring(src), i, expectedType, actualType
-                            ))
-                            if options.onValidationFailed then
-                                options.onValidationFailed(src, i, expectedType, actualType)
-                            end
-                            return
+                    local isValid = true
+                    if isOptional and actualType == "nil" then
+                        isValid = true
+                    elseif targetType == "any" then
+                        isValid = true
+                    elseif targetType == "pos_int" then
+                        isValid = (actualType == "number" and val == val and math.abs(val) ~= math.huge and math.floor(val) == val and val > 0 and val <= 2147483647)
+                    elseif targetType == "pos_number" then
+                        isValid = (actualType == "number" and val == val and math.abs(val) ~= math.huge and val > 0 and val < 1e12)
+                    else
+                        isValid = (actualType == targetType)
+                    end
+
+                    if not isValid then
+                        print(string.format(
+                            "^1[Vanguard Security] Tipo inválido no evento '%s' de [%s] no param #%d: esperado '%s', recebido '%s' (%s). Ação descartada.^0",
+                            eventName, tostring(src), i, expectedType, actualType, tostring(val)
+                        ))
+                        if options.onValidationFailed then
+                            options.onValidationFailed(src, i, expectedType, actualType)
                         end
+                        return
                     end
                 end
             end
@@ -214,9 +225,9 @@ if isServer then
         return exports[vanguard.libResource]:GetPlayer(source)
     end
 
-    --- Retorna o saldo bancário ou em dinheiro do jogador
+    --- Retorna o saldo bancário, em dinheiro ou gemas do jogador
     --- @param source number | string
-    --- @param moneyType string "bank" | "cash"
+    --- @param moneyType string "bank" | "cash" | "gems" | "crypto" | string
     --- @return number
     function vanguard.player.getMoney(source, moneyType)
         return exports[vanguard.libResource]:GetPlayerMoney(source, moneyType)
@@ -224,7 +235,7 @@ if isServer then
 
     --- Adiciona dinheiro ao jogador com registro de auditoria
     --- @param source number | string
-    --- @param moneyType string "bank" | "cash"
+    --- @param moneyType string "bank" | "cash" | "gems" | "crypto" | string
     --- @param amount number Valor positivo
     --- @param reason? string Motivo para log e auditoria
     --- @return boolean
@@ -234,12 +245,37 @@ if isServer then
 
     --- Remove dinheiro do jogador com registro de auditoria
     --- @param source number | string
-    --- @param moneyType string "bank" | "cash"
+    --- @param moneyType string "bank" | "cash" | "gems" | "crypto" | string
     --- @param amount number Valor positivo
     --- @param reason? string Motivo para log e auditoria
     --- @return boolean
     function vanguard.player.removeMoney(source, moneyType, amount, reason)
         return exports[vanguard.libResource]:RemoveMoney(source, moneyType, amount, reason or (currentResource .. ":removeMoney"))
+    end
+
+    --- Retorna o saldo de gemas VIP do jogador
+    --- @param source number | string
+    --- @return number
+    function vanguard.player.getGems(source)
+        return exports[vanguard.libResource]:GetPlayerGems(source)
+    end
+
+    --- Adiciona gemas VIP ao jogador
+    --- @param source number | string
+    --- @param amount number
+    --- @param reason? string
+    --- @return boolean
+    function vanguard.player.addGems(source, amount, reason)
+        return exports[vanguard.libResource]:AddGems(source, amount, reason or (currentResource .. ":addGems"))
+    end
+
+    --- Remove gemas VIP do jogador
+    --- @param source number | string
+    --- @param amount number
+    --- @param reason? string
+    --- @return boolean
+    function vanguard.player.removeGems(source, amount, reason)
+        return exports[vanguard.libResource]:RemoveGems(source, amount, reason or (currentResource .. ":removeGems"))
     end
 
     --- Retorna informações de emprego do jogador
