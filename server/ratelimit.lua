@@ -17,31 +17,68 @@ function RateLimiter.Check(source, operation, cooldownMs)
     if not source or not operation or not cooldownMs then
         return false
     end
-    local key = tostring(source) .. ":" .. operation
-    local now = GetGameTimer()
-    if cooldowns[key] and (now - cooldowns[key]) < cooldownMs then
-        return false
+    local cooldown = tonumber(cooldownMs)
+    if not cooldown or cooldown <= 0 then
+        return true
     end
-    cooldowns[key] = now
+    local srcStr = tostring(source)
+    local now = GetGameTimer()
+
+    local playerCooldowns = cooldowns[srcStr]
+    if playerCooldowns then
+        local entry = playerCooldowns[operation]
+        if entry and (now - entry.time) < cooldown then
+            return false
+        end
+    else
+        playerCooldowns = {}
+        cooldowns[srcStr] = playerCooldowns
+    end
+
+    playerCooldowns[operation] = { time = now, expire = now + cooldown }
     return true
 end
 
 --- Remove todos os cooldowns de um jogador (útil no disconnect).
---- @param source number  Server ID
+--- @param source number | string Server ID
 function RateLimiter.Clear(source)
     if not source then return end
-    local prefix = tostring(source) .. ":"
-    for key in pairs(cooldowns) do
-        if key:sub(1, #prefix) == prefix then
-            cooldowns[key] = nil
-        end
-    end
+    cooldowns[tostring(source)] = nil
 end
 
 --- Remove todos os cooldowns (útil em resource restart).
 function RateLimiter.ClearAll()
     cooldowns = {}
 end
+
+-- Limpeza periódica automática de cooldowns expirados para evitar vazamento de memória
+CreateThread(function()
+    while true do
+        Wait(60000) -- Executa a cada 60 segundos
+        local now = GetGameTimer()
+        for srcStr, playerCooldowns in pairs(cooldowns) do
+            local hasEntries = false
+            for op, entry in pairs(playerCooldowns) do
+                if entry and entry.expire and now >= entry.expire then
+                    playerCooldowns[op] = nil
+                else
+                    hasEntries = true
+                end
+            end
+            if not hasEntries then
+                cooldowns[srcStr] = nil
+            end
+        end
+    end
+end)
+
+-- Limpa cooldowns automaticamente ao desconectar
+AddEventHandler('playerDropped', function()
+    local src = source
+    if src then
+        RateLimiter.Clear(src)
+    end
+end)
 
 exports('RateLimiterCheck', function(source, operation, cooldownMs)
     return RateLimiter.Check(source, operation, cooldownMs)
@@ -52,3 +89,4 @@ exports('RateLimiterClear', function(source)
 end)
 
 print("^5[Vanguard] Lib: ratelimit loaded.^0")
+

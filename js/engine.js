@@ -199,15 +199,23 @@ export class GameRenderer {
             const imageURL = this.renderer.domElement.toDataURL('image/png', 1.0);
             const formData = new FormData();
             formData.append(field, dataURItoBlob(imageURL), 'screenshot.png');
-            if (UploadMethod == 'fivemanage') {
-                var fivemmanageAPI = url;
-                url = 'https://api.fivemanage.com/api/image';
+            let uploadUrl = url || '';
+            let headers = {};
+            if (UploadMethod === 'fivemanage') {
+                headers['Authorization'] = uploadUrl;
+                uploadUrl = 'https://api.fivemanage.com/api/image';
             }
-            fetch(url, {
+
+            if (!uploadUrl || typeof uploadUrl !== 'string' || (!uploadUrl.startsWith('https://') && !uploadUrl.startsWith('http://'))) {
+                console.error('[Vanguard Engine] URL de upload de screenshot inválida ou insegura.');
+                postNUI('ERROR_PHOTO_UPLOAD_INSTANT');
+                resolve(false);
+                return;
+            }
+
+            fetch(uploadUrl, {
                 method: 'POST',
-                headers: {
-                    Authorization: fivemmanageAPI,
-                },
+                headers: headers,
                 body: formData,
             })
                 .then((response) => response.json())

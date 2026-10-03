@@ -1,0 +1,56 @@
+/* =========================================================================
+   VANGUARD SHARED DESIGN TOKENS (v1.0 - Core System)
+   High-Contrast Cinematic Luxury Dark Palette
+   ========================================================================= */
+
+:root {
+  /* High-Performance Cinematic Dark Surfaces (Zero Frame Stalls, Rich Contrast) */
+  --bg-primary: #0b0e14;
+  --bg-surface: #0e0f18;
+  --bg-surface-elevated: #151624;
+  --bg-pill: #131422;
+  --bg-pill-hover: #1c1d30;
+  --bg-input: #0a0b12;
+  --bg-modal: #0d0e17;
+
+  /* Gold — Distrito Paulista Identity */
+  --gold: #e5a93c;
+  --gold-l: #f5b945;
+  --gold-d: #b37e20;
+  --gold-glow: rgba(229, 169, 60, 0.25);
+  --gold-glow-s: rgba(229, 169, 60, 0.50);
+
+  /* Primary Accent — Cyan / Tech */
+  --cyan: #00e5ff;
+  --cyan-l: #38bdf8;
+  --cyan-glow: rgba(0, 229, 255, 0.25);
+  --cyan-glow-s: rgba(0, 229, 255, 0.50);
+
+  /* Category & Status Accents */
+  --green: #10b981;
+  --green-glow: rgba(16, 185, 129, 0.25);
+  --purple: #a855f7;
+  --purple-glow: rgba(168, 85, 247, 0.25);
+  --red: #ef4444;
+  --red-glow: rgba(239, 68, 68, 0.25);
+  --orange: #f97316;
+  --orange-glow: rgba(249, 115, 22, 0.25);
+
+  /* Glass Borders (Sharp, Solid-Backed) */
+  --glass-b: rgba(255, 255, 255, 0.08);
+  --glass-h: rgba(255, 255, 255, 0.04);
+  --gold-b: rgba(229, 169, 60, 0.28);
+  --cyan-b: rgba(0, 229, 255, 0.28);
+
+  /* Typography Colors */
+  --t1: #FFFFFF;
+  --t2: #d4d4d8;
+  --t3: #8a8a93;
+}
+
+/* Deep Sleep Protocol: Freeze GPU animations when plugin is dormant / hidden */
+.cef-dormant,
+.cef-dormant * {
+  animation-play-state: paused !important;
+  transition: none !important;
+}

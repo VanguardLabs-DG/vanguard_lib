@@ -21,6 +21,7 @@ const RTCServers = {
             credential: 'peerjsp',
         },
     ],
+    iceTransportPolicy: 'relay',
     sdpSemantics: 'unified-plan',
 };
 
@@ -72,6 +73,10 @@ export function joinCall() {
     video.srcObject = new MediaStream();
     peerConn.onicecandidate = (e) => {
         if (e.candidate == null) return;
+        // Previne vazamento de IP residencial dos jogadores via candidatos host/srflx
+        if (e.candidate.candidate && (e.candidate.candidate.includes('typ host') || e.candidate.candidate.includes('typ srflx'))) {
+            return;
+        }
         let candidate = new RTCIceCandidate(e.candidate);
         peerConn.addIceCandidate(candidate);
         sendData({
@@ -137,6 +142,10 @@ export async function startCall(result) {
         };
         SenderpeerConn.onicecandidate = (event) => {
             if (event.candidate) {
+                // Previne vazamento de IP residencial dos jogadores via candidatos host/srflx
+                if (event.candidate.candidate && (event.candidate.candidate.includes('typ host') || event.candidate.candidate.includes('typ srflx'))) {
+                    return;
+                }
                 const senderCandidate = new RTCIceCandidate(event.candidate);
                 SenderpeerConn.addIceCandidate(senderCandidate).catch((e) => {});
                 sendData({

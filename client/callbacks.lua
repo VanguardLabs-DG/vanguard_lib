@@ -11,4 +11,8 @@ function TriggerServerCallback(name, ...)
     return lib.callback.await(name, false, ...)
 end
 
+exports('TriggerServerCallback', function(name, ...)
+    return TriggerServerCallback(name, ...)
+end)
+
 print("^5[Vanguard] Lib: client callbacks loaded.^0")

@@ -9,13 +9,37 @@
 function RegisterServerCallback(name, cb)
     lib.callback.register(name, function(source, ...)
         local p = promise.new()
+        local isResolved = false
 
-        cb(source, function(...)
-            p:resolve({...})
-        end, ...)
+        -- Timeout de segurança para evitar vazamento de coroutine / promise pendente
+        SetTimeout(10000, function()
+            if not isResolved then
+                isResolved = true
+                p:resolve({ false, "CALLBACK_TIMEOUT" })
+            end
+        end)
+
+        local args = { ... }
+        local success, err = pcall(function()
+            cb(source, function(...)
+                if not isResolved then
+                    isResolved = true
+                    p:resolve({ ... })
+                end
+            end, table.unpack(args))
+        end)
+
+        if not success and not isResolved then
+            isResolved = true
+            print(string.format("^1[Vanguard Lib] Erro no callback '%s': %s^0", tostring(name), tostring(err)))
+            p:resolve({ false, "CALLBACK_INTERNAL_ERROR" })
+        end
 
         local result = Citizen.Await(p)
-        return table.unpack(result)
+        if type(result) == "table" then
+            return table.unpack(result)
+        end
+        return result
     end)
 end
 
